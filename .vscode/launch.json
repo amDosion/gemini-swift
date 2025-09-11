@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:gemini-swfit}",
+            "name": "Debug GeminiTestRunner",
+            "program": "${workspaceFolder:gemini-swfit}/.build/debug/GeminiTestRunner",
+            "preLaunchTask": "swift: Build Debug GeminiTestRunner"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:gemini-swfit}",
+            "name": "Release GeminiTestRunner",
+            "program": "${workspaceFolder:gemini-swfit}/.build/release/GeminiTestRunner",
+            "preLaunchTask": "swift: Build Release GeminiTestRunner"
+        }
+    ]
+}

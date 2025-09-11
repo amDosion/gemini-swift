@@ -1,0 +1,25 @@
+.DS_Store
+/.build
+/Packages
+xcuserdata/
+DerivedData/
+.swiftpm/configuration/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.netrc
+# Xcode scheme files (may contain environment variables with sensitive data)
+*.xcscheme
+
+# Environment files (may contain API keys)
+.env
+.env.local
+.env.*.local
+
+# Test logs
+*.log
+video_test.log
+audio_test.log
+
+# Sensitive data files
+*apikey*
+*secret*
+*credentials*

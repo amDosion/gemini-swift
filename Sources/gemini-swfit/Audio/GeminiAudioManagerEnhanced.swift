@@ -77,22 +77,22 @@ public class GeminiAudioManagerEnhanced {
                 )
                 
                 results.append((fileInfo.displayName ?? fileInfo.name, transcription))
-                
+
                 // Report success to key manager
-                if let apiKey = keyManager.getAvailableKey() {
-                    keyManager.reportSuccess(for: apiKey)
+                if let apiKey = await keyManager.getAvailableKey() {
+                    await keyManager.reportSuccess(for: apiKey)
                 }
-                
+
                 // Update progress
                 let progress = Double(index + 1) / Double(totalFiles)
                 progressHandler?(progress, index + 1)
-                
+
             } catch {
                 logger.error("Failed to transcribe \(fileInfo.displayName ?? fileInfo.name): \(error)")
-                
+
                 // Report error
-                if let apiKey = keyManager.getAvailableKey() {
-                    keyManager.reportError(for: apiKey, error: error)
+                if let apiKey = await keyManager.getAvailableKey() {
+                    await keyManager.reportError(for: apiKey, error: error)
                 }
                 
                 // Add error result

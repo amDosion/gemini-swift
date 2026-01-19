@@ -49,7 +49,7 @@ public class GeminiImageGenerator {
             )
         }
 
-        let endpoint = "\(geminiBaseURL)models/\(model.rawValue):generateContent?key=\(apiKey)"
+        let endpoint = "\(geminiBaseURL)models/\(model.rawValue):generateContent"
 
         guard let url = URL(string: endpoint) else {
             throw GeminiImageError.invalidConfiguration("Invalid URL")
@@ -61,6 +61,7 @@ public class GeminiImageGenerator {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
 
         let encoder = JSONEncoder()
         request.httpBody = try encoder.encode(requestBody)
@@ -110,7 +111,7 @@ public class GeminiImageGenerator {
             )
         }
 
-        let endpoint = "\(geminiBaseURL)models/\(model.rawValue):generateContent?key=\(apiKey)"
+        let endpoint = "\(geminiBaseURL)models/\(model.rawValue):generateContent"
 
         guard let url = URL(string: endpoint) else {
             throw GeminiImageError.invalidConfiguration("Invalid URL")
@@ -127,6 +128,7 @@ public class GeminiImageGenerator {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
 
         let encoder = JSONEncoder()
         request.httpBody = try encoder.encode(requestBody)
@@ -169,7 +171,7 @@ public class GeminiImageGenerator {
             )
         }
 
-        let endpoint = "\(geminiBaseURL)models/\(model.rawValue):predict?key=\(apiKey)"
+        let endpoint = "\(geminiBaseURL)models/\(model.rawValue):predict"
 
         guard let url = URL(string: endpoint) else {
             throw GeminiImageError.invalidConfiguration("Invalid URL")
@@ -181,6 +183,7 @@ public class GeminiImageGenerator {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
 
         let encoder = JSONEncoder()
         request.httpBody = try encoder.encode(requestBody)

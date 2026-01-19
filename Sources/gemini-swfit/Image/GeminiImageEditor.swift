@@ -60,7 +60,7 @@ public class GeminiImageEditor {
             )
         }
 
-        let endpoint = "\(apiBaseURL)models/\(model.rawValue):generateContent?key=\(apiKey)"
+        let endpoint = "\(apiBaseURL)models/\(model.rawValue):generateContent"
 
         guard let url = URL(string: endpoint) else {
             throw GeminiImageError.invalidConfiguration("Invalid URL")
@@ -76,6 +76,7 @@ public class GeminiImageEditor {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
 
         let encoder = JSONEncoder()
         request.httpBody = try encoder.encode(requestBody)
@@ -120,7 +121,7 @@ public class GeminiImageEditor {
         model: ImageEditingModel = .imagen3Capability,
         apiKey: String
     ) async throws -> ImageEditingResponse {
-        let endpoint = "\(apiBaseURL)models/\(model.rawValue):predict?key=\(apiKey)"
+        let endpoint = "\(apiBaseURL)models/\(model.rawValue):predict"
 
         guard let url = URL(string: endpoint) else {
             throw GeminiImageError.invalidConfiguration("Invalid URL")
@@ -136,6 +137,7 @@ public class GeminiImageEditor {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
 
         let encoder = JSONEncoder()
         request.httpBody = try encoder.encode(requestBody)

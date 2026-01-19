@@ -42,7 +42,7 @@ public final class WorkflowCoordinator: @unchecked Sendable {
         case running
         case paused
         case completed
-        case failed(Error)
+        case failed(String) // error message instead of Error (not Sendable)
         case cancelled
     }
 
@@ -173,11 +173,11 @@ public final class WorkflowCoordinator: @unchecked Sendable {
 
         } catch {
             // Update failed state
-            context.state = .failed(error)
+            context.state = .failed(error.localizedDescription)
             updateContext(workflowId: workflowId, context: context)
 
             // Emit failure event
-            emitEvent(.workflowFailed(workflowId, error))
+            emitEvent(.workflowFailed(workflowId, error.localizedDescription))
 
             throw error
         }
@@ -279,10 +279,10 @@ public final class WorkflowCoordinator: @unchecked Sendable {
 
             } catch {
                 context.metrics.failedSteps += 1
-                emitEvent(.stepFailed(workflow.id, step.id, error))
+                emitEvent(.stepFailed(workflow.id, step.id, error.localizedDescription))
 
                 if step.isRequired {
-                    throw WorkflowError.stepFailed(step.id, error)
+                    throw WorkflowError.stepFailed(step.id, error.localizedDescription)
                 }
 
                 logger.warning("[Coordinator] Optional step \(step.name) failed: \(error)")
@@ -522,7 +522,7 @@ public final class WorkflowCoordinator: @unchecked Sendable {
 // MARK: - Workflow Error
 
 public enum WorkflowError: Error, Sendable {
-    case stepFailed(String, Error)
+    case stepFailed(String, String) // stepId, errorMessage
     case timeout(TimeInterval)
     case cancelled
     case invalidWorkflow(String)

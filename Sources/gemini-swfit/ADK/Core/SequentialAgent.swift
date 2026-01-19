@@ -111,7 +111,7 @@ public final class SequentialAgent: WorkflowAgent, @unchecked Sendable {
                 logger.error("[\(name)] Agent \(agent.name) failed: \(error)")
 
                 if stopOnError {
-                    throw AgentError.childAgentFailed(agent.id, error)
+                    throw AgentError.childAgentFailed(agent.id, error.localizedDescription)
                 }
             }
         }

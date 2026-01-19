@@ -100,18 +100,28 @@ public enum AgentPriority: Int, Sendable, Comparable {
 
 /// Type-erased Sendable value for heterogeneous collections
 public struct AnySendable: @unchecked Sendable {
-    private let _value: Any
+    public let value: Any
 
     public init<T: Sendable>(_ value: T) {
-        self._value = value
+        self.value = value
     }
 
     public func getValue<T>() -> T? {
-        return _value as? T
+        return value as? T
     }
 
-    public var stringValue: String? { getValue() }
-    public var intValue: Int? { getValue() }
+    public var stringValue: String? {
+        if let str = value as? String { return str }
+        if let num = value as? Double { return String(format: "%.2f", num) }
+        if let num = value as? Int { return String(num) }
+        if let bool = value as? Bool { return bool ? "true" : "false" }
+        return nil
+    }
+    public var intValue: Int? {
+        if let num = value as? Int { return num }
+        if let num = value as? Double { return Int(num) }
+        return nil
+    }
     public var doubleValue: Double? { getValue() }
     public var boolValue: Bool? { getValue() }
     public var arrayValue: [AnySendable]? { getValue() }
@@ -163,6 +173,8 @@ public enum AgentCapability: String, Sendable, CaseIterable {
     case review
     case selfArgumentation
     case boundaryValidation
+    case validation
+    case contextManagement
 }
 
 // MARK: - LLM Agent Protocol
@@ -254,7 +266,7 @@ public enum AgentError: Error, Sendable {
     case timeout
     case cancelled
     case maxRetriesExceeded
-    case childAgentFailed(String, Error)
+    case childAgentFailed(String, String) // agentId, errorMessage
     case invalidInput(String)
     case invalidOutput(String)
     case configurationError(String)

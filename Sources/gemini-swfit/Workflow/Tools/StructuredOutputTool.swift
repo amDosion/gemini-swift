@@ -13,8 +13,17 @@ public final class StructuredOutputTool: AgentTool, @unchecked Sendable {
 
     // MARK: - Properties
 
+    public let id: String
     public let name: String = "structured_output"
     public let description: String = "Generates structured JSON output based on a schema"
+    public let inputSchema: [String: Any] = [
+        "type": "object",
+        "properties": [
+            "prompt": ["type": "string", "description": "The prompt for structured output generation"],
+            "schema": ["type": "object", "description": "JSON Schema defining the output structure"]
+        ],
+        "required": ["prompt", "schema"]
+    ]
 
     private let client: GeminiClient
     private let logger: SwiftyBeaver.Type
@@ -22,21 +31,23 @@ public final class StructuredOutputTool: AgentTool, @unchecked Sendable {
     // MARK: - Initialization
 
     public init(
+        id: String = UUID().uuidString,
         client: GeminiClient,
         logger: SwiftyBeaver.Type = SwiftyBeaver.self
     ) {
+        self.id = id
         self.client = client
         self.logger = logger
     }
 
     // MARK: - AgentTool Protocol
 
-    public func execute(parameters: [String: Any]) async throws -> Any {
-        guard let prompt = parameters["prompt"] as? String else {
+    public func execute(parameters: [String: AnySendable]) async throws -> AnySendable {
+        guard let promptValue = parameters["prompt"], let prompt = promptValue.stringValue else {
             throw ToolError.missingParameter("prompt")
         }
 
-        guard let schemaDict = parameters["schema"] as? [String: Any] else {
+        guard let schemaValue = parameters["schema"], let schemaDict = schemaValue.dictValue else {
             throw ToolError.missingParameter("schema")
         }
 
@@ -62,22 +73,29 @@ public final class StructuredOutputTool: AgentTool, @unchecked Sendable {
             throw ToolError.executionFailed("Invalid JSON response")
         }
 
-        return json
+        return AnySendable(json)
     }
 
     // MARK: - Helper Methods
 
-    private func buildJSONSchema(from dict: [String: Any]) -> [String: Any] {
+    private func buildJSONSchema(from dict: [String: AnySendable]) -> [String: Any] {
         // Convert dictionary to Gemini-compatible JSON Schema
         var schema: [String: Any] = [:]
-        schema["type"] = dict["type"] ?? "object"
+        schema["type"] = dict["type"]?.stringValue ?? "object"
 
-        if let properties = dict["properties"] as? [String: Any] {
-            schema["properties"] = properties
+        if let propertiesValue = dict["properties"],
+           let properties = propertiesValue.dictValue {
+            // Convert [String: AnySendable] to [String: Any]
+            var propsAny: [String: Any] = [:]
+            for (key, value) in properties {
+                propsAny[key] = value.value
+            }
+            schema["properties"] = propsAny
         }
 
-        if let required = dict["required"] as? [String] {
-            schema["required"] = required
+        if let requiredValue = dict["required"],
+           let required = requiredValue.arrayValue {
+            schema["required"] = required.compactMap { $0.stringValue }
         }
 
         return schema

@@ -16,68 +16,67 @@ public struct Workflow: Sendable {
     public let description: String
     public let steps: [WorkflowStep]
     public let options: WorkflowOptions
+    public let initialInput: AgentInput?
 
     public init(
         id: String = UUID().uuidString,
         name: String = "Unnamed Workflow",
         description: String = "",
         steps: [WorkflowStep] = [],
-        options: WorkflowOptions = .default
+        options: WorkflowOptions = .default,
+        initialInput: AgentInput? = nil
     ) {
         self.id = id
         self.name = name
         self.description = description
         self.steps = steps
         self.options = options
+        self.initialInput = initialInput
     }
 }
 
 /// A single step in a workflow
-public struct WorkflowStep: Sendable {
+public struct WorkflowStep: @unchecked Sendable {
     public let id: String
     public let name: String
-    public let agentId: String
+    public let agent: any Agent
     public let inputs: [String: AnySendable]
     public let dependsOn: [String]
     public let condition: WorkflowCondition?
+    public let isRequired: Bool
+    public let timeout: TimeInterval?
+    public let retryPolicy: RetryPolicy?
 
     public init(
         id: String = UUID().uuidString,
         name: String,
-        agentId: String,
+        agent: any Agent,
         inputs: [String: AnySendable] = [:],
         dependsOn: [String] = [],
-        condition: WorkflowCondition? = nil
+        condition: WorkflowCondition? = nil,
+        isRequired: Bool = true,
+        timeout: TimeInterval? = nil,
+        retryPolicy: RetryPolicy? = nil
     ) {
         self.id = id
         self.name = name
-        self.agentId = agentId
+        self.agent = agent
         self.inputs = inputs
         self.dependsOn = dependsOn
         self.condition = condition
+        self.isRequired = isRequired
+        self.timeout = timeout
+        self.retryPolicy = retryPolicy
     }
 }
 
 /// Condition for workflow step execution
-public struct WorkflowCondition: Sendable {
-    public let expression: String
-    public let type: ConditionType
-
-    public enum ConditionType: String, Sendable {
-        case always
-        case ifPreviousSuccess
-        case ifPreviousFailed
-        case custom
-    }
-
-    public init(expression: String = "", type: ConditionType = .always) {
-        self.expression = expression
-        self.type = type
-    }
-
-    public static let always = WorkflowCondition(type: .always)
-    public static let ifSuccess = WorkflowCondition(type: .ifPreviousSuccess)
-    public static let ifFailed = WorkflowCondition(type: .ifPreviousFailed)
+public enum WorkflowCondition: Sendable {
+    case always
+    case confidenceAbove(Double)
+    case outputContains(String)
+    case previousSuccess
+    case custom(String)
 }
 
 // MARK: - Workflow Options
@@ -134,27 +133,44 @@ public struct RetryPolicy: Sendable {
     public let maxRetries: Int
     public let initialDelay: TimeInterval
     public let maxDelay: TimeInterval
-    public let multiplier: Double
+    public let backoffStrategy: BackoffStrategy
+
+    public enum BackoffStrategy: Sendable {
+        case fixed
+        case linear
+        case exponential
+        case jitter
+    }
 
     public init(
         maxRetries: Int = 3,
         initialDelay: TimeInterval = 1.0,
         maxDelay: TimeInterval = 30.0,
-        multiplier: Double = 2.0
+        backoffStrategy: BackoffStrategy = .exponential
     ) {
         self.maxRetries = maxRetries
         self.initialDelay = initialDelay
         self.maxDelay = maxDelay
-        self.multiplier = multiplier
+        self.backoffStrategy = backoffStrategy
     }
 
     public static let `default` = RetryPolicy()
-    public static let aggressive = RetryPolicy(maxRetries: 5, multiplier: 1.5)
+    public static let aggressive = RetryPolicy(maxRetries: 5, backoffStrategy: .linear)
     public static let none = RetryPolicy(maxRetries: 0)
 
     public func delay(for attempt: Int) -> TimeInterval {
-        let delay = initialDelay * pow(multiplier, Double(attempt))
-        return min(delay, maxDelay)
+        switch backoffStrategy {
+        case .fixed:
+            return initialDelay
+        case .linear:
+            return initialDelay * Double(attempt)
+        case .exponential:
+            return min(initialDelay * pow(2.0, Double(attempt - 1)), maxDelay)
+        case .jitter:
+            let base = initialDelay * pow(2.0, Double(attempt - 1))
+            let jitter = Double.random(in: 0...1) * base * 0.3
+            return min(base + jitter, maxDelay)
+        }
     }
 }
 
@@ -164,24 +180,27 @@ public struct RetryPolicy: Sendable {
 public struct WorkflowResult: Sendable {
     public let workflowId: String
     public let status: WorkflowStatus
-    public let outputs: [String: AgentOutput]
-    public let finalOutput: AgentOutput?
-    public let executionTime: TimeInterval
-    public let metadata: WorkflowResultMetadata
+    public let outputs: [AgentOutput]
+    public let finalOutput: String
+    public let confidence: Double
+    public let totalProcessingTime: TimeInterval
+    public let metadata: [String: AnySendable]
 
     public init(
         workflowId: String,
         status: WorkflowStatus,
-        outputs: [String: AgentOutput] = [:],
-        finalOutput: AgentOutput? = nil,
-        executionTime: TimeInterval = 0,
-        metadata: WorkflowResultMetadata = .init()
+        outputs: [AgentOutput] = [],
+        finalOutput: String = "",
+        confidence: Double = 0.0,
+        totalProcessingTime: TimeInterval = 0,
+        metadata: [String: AnySendable] = [:]
     ) {
         self.workflowId = workflowId
         self.status = status
         self.outputs = outputs
         self.finalOutput = finalOutput
-        self.executionTime = executionTime
+        self.confidence = confidence
+        self.totalProcessingTime = totalProcessingTime
         self.metadata = metadata
     }
 }
@@ -196,43 +215,19 @@ public enum WorkflowStatus: String, Sendable {
     case timedOut
 }
 
-/// Metadata for workflow results
-public struct WorkflowResultMetadata: Sendable {
-    public let stepsCompleted: Int
-    public let stepsFailed: Int
-    public let argumentationCycles: Int
-    public let reviewScore: Double?
-    public let boundaryViolations: [String]
-
-    public init(
-        stepsCompleted: Int = 0,
-        stepsFailed: Int = 0,
-        argumentationCycles: Int = 0,
-        reviewScore: Double? = nil,
-        boundaryViolations: [String] = []
-    ) {
-        self.stepsCompleted = stepsCompleted
-        self.stepsFailed = stepsFailed
-        self.argumentationCycles = argumentationCycles
-        self.reviewScore = reviewScore
-        self.boundaryViolations = boundaryViolations
-    }
-}
-
 // MARK: - Workflow Events
 
 /// Events emitted during workflow execution
 public enum WorkflowEvent: Sendable {
-    case started(workflowId: String)
-    case stepStarted(stepId: String, agentId: String)
-    case stepCompleted(stepId: String, output: AgentOutput)
-    case stepFailed(stepId: String, error: String)
-    case argumentationCycleCompleted(cycle: Int, result: String)
-    case reviewCompleted(score: Double)
-    case boundaryCheckCompleted(violations: [String])
-    case completed(result: WorkflowResult)
-    case failed(error: String)
-    case cancelled
+    case workflowStarted(String)
+    case workflowCompleted(String)
+    case workflowFailed(String, String) // workflowId, errorMessage
+    case workflowPaused(String)
+    case workflowResumed(String)
+    case workflowCancelled(String)
+    case stepStarted(String, String) // workflowId, stepId
+    case stepCompleted(String, String, AgentOutput) // workflowId, stepId, output
+    case stepFailed(String, String, String) // workflowId, stepId, errorMessage
 }
 
 /// Protocol for workflow event handling
@@ -273,6 +268,7 @@ public extension Workflow {
         name: String = "Unnamed Workflow",
         description: String = "",
         options: WorkflowOptions = .default,
+        initialInput: AgentInput? = nil,
         @WorkflowBuilder steps: () -> [WorkflowStep]
     ) {
         self.id = id
@@ -280,5 +276,6 @@ public extension Workflow {
         self.description = description
         self.steps = steps()
         self.options = options
+        self.initialInput = initialInput
     }
 }

@@ -147,10 +147,10 @@ public final class LoopAgent: WorkflowAgent, @unchecked Sendable {
     private func hasConverged(outputs: [AgentOutput], tolerance: Double) -> Bool {
         guard outputs.count >= 2 else { return false }
 
-        let lastTwo = outputs.suffix(2)
-        let confidences = lastTwo.map { $0.confidence }
+        let lastTwo = Array(outputs.suffix(2))
+        guard lastTwo.count == 2 else { return false }
 
-        let diff = abs(confidences[0] - confidences[1])
+        let diff = abs(lastTwo[0].confidence - lastTwo[1].confidence)
         return diff < tolerance
     }
 

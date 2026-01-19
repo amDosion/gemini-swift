@@ -326,7 +326,9 @@ public final class SelfArgueAgent: Agent, @unchecked Sendable {
         previousArguments: [Argument],
         topic: String
     ) async throws -> Argument {
-        let lastArg = previousArguments.last!
+        guard let lastArg = previousArguments.last else {
+            throw AgentError.processingFailed("No previous arguments for deep review")
+        }
 
         let prompt = """
         Deep review (Cycle \(cycle)) on "\(topic)":
@@ -431,7 +433,16 @@ public final class SelfArgueAgent: Agent, @unchecked Sendable {
     }
 
     private func buildResult(from arguments: [Argument], topic: String) -> ArgumentationResult {
-        let finalArg = arguments.last!
+        guard let finalArg = arguments.last else {
+            // Return a default result if no arguments (should not happen)
+            return ArgumentationResult(
+                cycles: [],
+                finalConclusion: "No conclusion reached",
+                confidenceScore: 0.0,
+                consensusReached: false,
+                keyInsights: []
+            )
+        }
         let avgConfidence = arguments.reduce(0.0) { $0 + $1.confidence } / Double(arguments.count)
 
         // Extract key insights from all cycles

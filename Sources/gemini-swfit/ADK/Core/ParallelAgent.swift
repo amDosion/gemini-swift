@@ -103,7 +103,7 @@ public final class ParallelAgent: WorkflowAgent, @unchecked Sendable {
                 if let output = result.1 {
                     outputs.append((result.0, output))
                 } else if failFast {
-                    throw AgentError.childAgentFailed("Agent at index \(result.0)", AgentError.processingFailed("Unknown"))
+                    throw AgentError.childAgentFailed("Agent at index \(result.0)", "Processing failed")
                 }
             }
 
@@ -190,7 +190,14 @@ public final class ParallelAgent: WorkflowAgent, @unchecked Sendable {
         outputs: [AgentOutput],
         processingTime: TimeInterval
     ) -> AgentOutput {
-        let best = outputs.max { $0.confidence < $1.confidence }!
+        guard let best = outputs.max(by: { $0.confidence < $1.confidence }) else {
+            return AgentOutput(
+                agentId: id,
+                content: "No outputs to aggregate",
+                confidence: 0.0,
+                processingTime: processingTime
+            )
+        }
 
         return AgentOutput(
             agentId: id,

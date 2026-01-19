@@ -48,8 +48,8 @@ public class GeminiAudioUploaderEnhanced: @unchecked Sendable {
         for attempt in 1...maxRetries {
             do {
                 // Get available key
-                guard let apiKey = keyManager.getAvailableKey(for: Int64(fileSize)) else {
-                    let waitTime = keyManager.estimatedWaitTime()
+                guard let apiKey = await keyManager.getAvailableKey(for: Int64(fileSize)) else {
+                    let waitTime = await keyManager.estimatedWaitTime()
                     throw GeminiAudioUploader.UploadError.uploadFailed(
                         NSError(domain: "GeminiAPI", code: 0, userInfo: [
                             "message": "No available API keys",
@@ -57,25 +57,25 @@ public class GeminiAudioUploaderEnhanced: @unchecked Sendable {
                         ])
                     )
                 }
-                
+
                 logger.info("Uploading audio with key: \(apiKey.prefix(8))... (attempt \(attempt))")
-                
+
                 // Perform upload using original uploader
                 let uploader = GeminiAudioUploader(baseURL: baseURL, logger: logger)
                 let session = GeminiAudioUploader.AudioSession(sessionID: UUID().uuidString, apiKey: apiKey)
                 let result = try await uploader.uploadAudio(at: fileURL, displayName: displayName, session: session)
-                
+
                 // Report success
-                keyManager.reportSuccess(for: apiKey, bytesUploaded: Int64(fileSize))
-                
+                await keyManager.reportSuccess(for: apiKey, bytesUploaded: Int64(fileSize))
+
                 return result
-                
+
             } catch {
                 lastError = error
-                
+
                 // Report error to key manager
                 if let apiKey = extractAPIKeyFromError(error) {
-                    keyManager.reportError(for: apiKey, error: error)
+                    await keyManager.reportError(for: apiKey, error: error)
                 }
                 
                 // Retry with exponential backoff

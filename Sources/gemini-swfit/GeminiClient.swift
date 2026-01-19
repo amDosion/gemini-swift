@@ -54,24 +54,36 @@ public class GeminiClient {
         }
     }
     
-    public init(apiKeys: [String], baseURL: URL? = nil, logger: SwiftyBeaver.Type = SwiftyBeaver.self) {
+    /// Initialize with multiple API keys
+    /// - Parameters:
+    ///   - apiKeys: Array of API keys (must not be empty)
+    ///   - baseURL: Optional custom base URL
+    ///   - logger: Logger instance
+    /// - Returns: nil if apiKeys is empty
+    public init?(apiKeys: [String], baseURL: URL? = nil, logger: SwiftyBeaver.Type = SwiftyBeaver.self) {
         guard !apiKeys.isEmpty else {
-            fatalError("API keys array cannot be empty")
+            return nil
         }
-        
+
         // Ensure logging is always initialized
         GeminiLogger.shared.setup()
-        
+
         self.apiKeys = apiKeys
         self.currentKeyIndex = 0
+        // Default URL is known to be valid, safe to force unwrap
         self.baseURL = baseURL ?? URL(string: "https://generativelanguage.googleapis.com/v1beta/")!
         self.session = URLSession.shared
         self.logger = logger
     }
-    
-    // Convenience initializer for single API key
+
+    /// Convenience initializer for single API key
+    /// - Parameters:
+    ///   - apiKey: Single API key
+    ///   - baseURL: Optional custom base URL
+    ///   - logger: Logger instance
     public convenience init(apiKey: String, baseURL: URL? = nil, logger: SwiftyBeaver.Type = SwiftyBeaver.self) {
-        self.init(apiKeys: [apiKey], baseURL: baseURL, logger: logger)
+        // Single key is always valid, use force unwrap since we know it won't fail
+        self.init(apiKeys: [apiKey], baseURL: baseURL, logger: logger)!
     }
     
     // MARK: - Private Key Management
@@ -111,18 +123,24 @@ public class GeminiClient {
     }
     
     /// Remove an API key by index
-    public func removeApiKey(at index: Int) {
-        keyQueue.sync(flags: .barrier) {
+    /// - Parameter index: Index of the key to remove
+    /// - Returns: true if removal was successful, false if cannot remove (last key or invalid index)
+    @discardableResult
+    public func removeApiKey(at index: Int) -> Bool {
+        return keyQueue.sync(flags: .barrier) {
             guard apiKeys.count > 1 else {
-                fatalError("Cannot remove the last API key")
+                logger.warning("Cannot remove the last API key")
+                return false
             }
             guard index < apiKeys.count else {
-                fatalError("Index out of range")
+                logger.warning("Index \(index) out of range (count: \(apiKeys.count))")
+                return false
             }
             apiKeys.remove(at: index)
             if currentKeyIndex >= apiKeys.count {
                 currentKeyIndex = 0
             }
+            return true
         }
     }
     

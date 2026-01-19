@@ -49,10 +49,15 @@ public class GeminiVideoManager {
             session: session
         )
         
+        // Ensure URI is available
+        guard let uri = fileInfo.uri else {
+            throw GeminiVideoUploader.UploadError.invalidUploadResponse
+        }
+
         // Analyze
         return try await client.analyzeVideo(
             model: model,
-            videoFileURI: fileInfo.uri!,
+            videoFileURI: uri,
             mimeType: fileInfo.mimeType ?? "video/mp4",
             prompt: prompt,
             systemInstruction: systemInstruction,
@@ -60,7 +65,7 @@ public class GeminiVideoManager {
             safetySettings: safetySettings
         )
     }
-    
+
     /// Transcribe video audio to text
     public func transcribe(
         videoFileURL: URL,
@@ -69,9 +74,12 @@ public class GeminiVideoManager {
         systemInstruction: String? = nil,
         displayName: String? = nil
     ) async throws -> String {
-        let prompt = language != nil ?
-            "Transcribe the audio from this video to text. Language: \(language!)" :
-            "Transcribe the audio from this video to text."
+        let prompt: String
+        if let lang = language {
+            prompt = "Transcribe the audio from this video to text. Language: \(lang)"
+        } else {
+            prompt = "Transcribe the audio from this video to text."
+        }
         
         return try await analyze(
             videoFileURL: videoFileURL,

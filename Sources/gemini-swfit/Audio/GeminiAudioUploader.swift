@@ -135,20 +135,30 @@ public class GeminiAudioUploader {
     public struct AudioSession: Sendable {
         public let sessionID: String
         public let apiKey: String
-        public var uploadedFiles: [UploadResponse.FileInfo]
-        
+        public let uploadedFiles: [UploadResponse.FileInfo]
+
         public init(sessionID: String, apiKey: String, uploadedFiles: [UploadResponse.FileInfo] = []) {
             self.sessionID = sessionID
             self.apiKey = apiKey
             self.uploadedFiles = uploadedFiles
         }
+
+        /// Create a new session with an additional uploaded file
+        func adding(file: UploadResponse.FileInfo) -> AudioSession {
+            return AudioSession(
+                sessionID: sessionID,
+                apiKey: apiKey,
+                uploadedFiles: uploadedFiles + [file]
+            )
+        }
     }
-    
+
     // MARK: - Properties
     private let baseURL: String
     private let session: URLSession
     private let logger: SwiftyBeaver.Type
     private var activeSessions: [String: AudioSession] = [:]
+    private let sessionQueue = DispatchQueue(label: "com.gemini.audioUploader.sessions", attributes: .concurrent)
     
     // MARK: - Initialization
     public init(baseURL: String = "https://generativelanguage.googleapis.com", logger: SwiftyBeaver.Type = SwiftyBeaver.self) {
@@ -162,9 +172,25 @@ public class GeminiAudioUploader {
     /// Start a new audio upload session
     public func startSession(apiKey: String) -> AudioSession {
         let sessionID = UUID().uuidString
-        let session = AudioSession(sessionID: sessionID, apiKey: apiKey)
-        activeSessions[sessionID] = session
-        return session
+        let newSession = AudioSession(sessionID: sessionID, apiKey: apiKey)
+        sessionQueue.sync(flags: .barrier) {
+            activeSessions[sessionID] = newSession
+        }
+        return newSession
+    }
+
+    /// Get a session by ID
+    public func getSession(_ sessionID: String) -> AudioSession? {
+        return sessionQueue.sync {
+            activeSessions[sessionID]
+        }
+    }
+
+    /// End a session
+    public func endSession(_ sessionID: String) {
+        sessionQueue.sync(flags: .barrier) {
+            activeSessions.removeValue(forKey: sessionID)
+        }
     }
     
     /// Upload an audio file using resumable upload protocol
@@ -190,11 +216,12 @@ public class GeminiAudioUploader {
             to: uploadURL
         )
         
-        // Update session
-        var updatedSession = session
-        updatedSession.uploadedFiles.append(response.file)
-        activeSessions[session.sessionID] = updatedSession
-        
+        // Update session with thread-safe access
+        let updatedSession = session.adding(file: response.file)
+        sessionQueue.sync(flags: .barrier) {
+            activeSessions[session.sessionID] = updatedSession
+        }
+
         return response.file
     }
     

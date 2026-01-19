@@ -147,48 +147,64 @@ public class GeminiVideoUploader {
     public struct VideoSession: Sendable {
         public let sessionID: String
         public let apiKey: String
-        public var uploadedFiles: [UploadResponse.FileInfo]
-        
+        public let uploadedFiles: [UploadResponse.FileInfo]
+
         public init(sessionID: String, apiKey: String, uploadedFiles: [UploadResponse.FileInfo] = []) {
             self.sessionID = sessionID
             self.apiKey = apiKey
             self.uploadedFiles = uploadedFiles
         }
+
+        /// Create a new session with an additional uploaded file
+        func adding(file: UploadResponse.FileInfo) -> VideoSession {
+            return VideoSession(
+                sessionID: sessionID,
+                apiKey: apiKey,
+                uploadedFiles: uploadedFiles + [file]
+            )
+        }
     }
-    
+
     // MARK: - Properties
     private let baseURL: String
     private let logger: SwiftyBeaver.Type
     private let sessionManager: URLSession
     private var activeSessions: [String: VideoSession] = [:]
-    
+    private let sessionQueue = DispatchQueue(label: "com.gemini.videoUploader.sessions", attributes: .concurrent)
+
     // MARK: - Initialization
     public init(baseURL: String, logger: SwiftyBeaver.Type = SwiftyBeaver.self) {
         self.baseURL = baseURL
         self.logger = logger
         self.sessionManager = URLSession.shared
     }
-    
+
     // MARK: - Session Management
-    
+
     /// Start a new video upload session
     public func startSession(apiKey: String) -> VideoSession {
         let sessionID = UUID().uuidString
-        let session = VideoSession(sessionID: sessionID, apiKey: apiKey)
-        activeSessions[sessionID] = session
+        let newSession = VideoSession(sessionID: sessionID, apiKey: apiKey)
+        sessionQueue.sync(flags: .barrier) {
+            activeSessions[sessionID] = newSession
+        }
         logger.info("Started new video upload session: \(sessionID)")
-        return session
+        return newSession
     }
-    
+
     /// End a video upload session
     public func endSession(_ session: VideoSession) {
-        activeSessions.removeValue(forKey: session.sessionID)
+        sessionQueue.sync(flags: .barrier) {
+            activeSessions.removeValue(forKey: session.sessionID)
+        }
         logger.info("Ended video upload session: \(session.sessionID)")
     }
-    
+
     /// Get active session
     public func getSession(sessionID: String) -> VideoSession? {
-        return activeSessions[sessionID]
+        return sessionQueue.sync {
+            activeSessions[sessionID]
+        }
     }
     
     // MARK: - Upload Methods

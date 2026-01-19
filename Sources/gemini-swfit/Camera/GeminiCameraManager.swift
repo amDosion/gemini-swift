@@ -66,6 +66,34 @@ public class GeminiCameraManager {
         )
     }
 
+    /// Image metadata that conforms to Sendable
+    public struct ImageMetadata: Sendable, Equatable {
+        public let colorSpace: String?
+        public let orientation: Int?
+        public let dpi: Int?
+        public let hasAlpha: Bool?
+        public let bitDepth: Int?
+        public let profileName: String?
+
+        public init(
+            colorSpace: String? = nil,
+            orientation: Int? = nil,
+            dpi: Int? = nil,
+            hasAlpha: Bool? = nil,
+            bitDepth: Int? = nil,
+            profileName: String? = nil
+        ) {
+            self.colorSpace = colorSpace
+            self.orientation = orientation
+            self.dpi = dpi
+            self.hasAlpha = hasAlpha
+            self.bitDepth = bitDepth
+            self.profileName = profileName
+        }
+
+        public static let empty = ImageMetadata()
+    }
+
     /// Captured photo data
     public struct CapturedPhoto: Sendable {
         public let data: Data
@@ -73,14 +101,14 @@ public class GeminiCameraManager {
         public let width: Int?
         public let height: Int?
         public let timestamp: Date
-        public let metadata: [String: Any]?
+        public let metadata: ImageMetadata?
 
         public init(
             data: Data,
             mimeType: String,
             width: Int? = nil,
             height: Int? = nil,
-            metadata: [String: Any]? = nil
+            metadata: ImageMetadata? = nil
         ) {
             self.data = data
             self.mimeType = mimeType

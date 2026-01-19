@@ -689,7 +689,7 @@ public class GeminiImageManager {
 extension GeminiImageManager {
 
     /// Create an image session for multiple operations with the same API key
-    public struct ImageSession {
+    public struct ImageSession: Sendable {
         let apiKey: String
         let uploadSession: GeminiImageUploader.ImageUploadSession
 

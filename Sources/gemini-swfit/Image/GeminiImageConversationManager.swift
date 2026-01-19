@@ -163,6 +163,21 @@ public class GeminiImageConversationManager {
         logger.info("Ended image conversation session: \(sessionId)")
     }
 
+    /// Atomically update a session (prevents race conditions)
+    private func updateSession(
+        _ sessionId: String,
+        update: @escaping (inout ConversationSession) -> Void
+    ) -> Bool {
+        return sessionQueue.sync(flags: .barrier) {
+            guard var session = activeSessions[sessionId] else {
+                return false
+            }
+            update(&session)
+            activeSessions[sessionId] = session
+            return true
+        }
+    }
+
     // MARK: - Conversation Methods
 
     /// Send a message in the conversation
@@ -171,71 +186,85 @@ public class GeminiImageConversationManager {
         sessionId: String,
         model: ImageGenerationModel = .gemini25FlashImage
     ) async throws -> ConversationResponse {
-        guard var session = getSession(sessionId) else {
+        // Atomically read session state and add user message
+        let sessionData: (apiKey: String, currentImage: Data?, mimeType: String?, messages: [ConversationMessage], messageCount: Int)?
+        sessionData = sessionQueue.sync(flags: .barrier) { () -> (String, Data?, String?, [ConversationMessage], Int)? in
+            guard var session = activeSessions[sessionId] else {
+                return nil
+            }
+
+            // Add user message atomically
+            let userMessage = ConversationMessage(
+                role: .user,
+                text: message
+            )
+            session.messages.append(userMessage)
+            activeSessions[sessionId] = session
+
+            return (session.apiKey, session.currentImage, session.currentImageMimeType, session.messages, session.messages.count)
+        }
+
+        guard let data = sessionData else {
             throw GeminiImageError.invalidConfiguration("Session not found")
         }
 
-        // Add user message to history
-        let userMessage = ConversationMessage(
-            role: .user,
-            text: message
-        )
-        session.messages.append(userMessage)
-
-        // Build conversation context
+        // Build conversation context and make API call (outside lock)
         let response: ConversationResponse
 
-        if let currentImage = session.currentImage,
-           let mimeType = session.currentImageMimeType {
+        if let currentImage = data.currentImage,
+           let mimeType = data.mimeType {
             // Edit existing image with conversation context
             response = try await editWithContext(
                 message: message,
                 imageData: currentImage,
                 imageMimeType: mimeType,
-                history: session.messages,
+                history: data.messages,
                 model: model,
-                apiKey: session.apiKey
+                apiKey: data.apiKey
             )
         } else if isGenerationRequest(message) {
             // Generate new image
             response = try await generateWithContext(
                 message: message,
-                history: session.messages,
+                history: data.messages,
                 model: model,
-                apiKey: session.apiKey
+                apiKey: data.apiKey
             )
         } else {
             // Text-only response about image operations
             response = ConversationResponse(
                 text: "Please provide an image or ask me to generate one.",
                 image: nil,
-                messageIndex: session.messages.count
+                messageIndex: data.messageCount
             )
         }
 
-        // Add model response to history
-        let modelMessage = ConversationMessage(
-            role: .model,
-            text: response.text,
-            imageData: response.image?.data,
-            imageMimeType: response.image?.mimeType
-        )
-        session.messages.append(modelMessage)
+        // Atomically update session with response
+        let maxMessages = maxContextMessages
+        let updated = updateSession(sessionId) { session in
+            // Add model response to history
+            let modelMessage = ConversationMessage(
+                role: .model,
+                text: response.text,
+                imageData: response.image?.data,
+                imageMimeType: response.image?.mimeType
+            )
+            session.messages.append(modelMessage)
 
-        // Update current image if new one was generated/edited
-        if let newImage = response.image {
-            session.currentImage = newImage.data
-            session.currentImageMimeType = newImage.mimeType
+            // Update current image if new one was generated/edited
+            if let newImage = response.image {
+                session.currentImage = newImage.data
+                session.currentImageMimeType = newImage.mimeType
+            }
+
+            // Trim history if too long
+            if session.messages.count > maxMessages * 2 {
+                session.messages = Array(session.messages.suffix(maxMessages * 2))
+            }
         }
 
-        // Trim history if too long
-        if session.messages.count > maxContextMessages * 2 {
-            session.messages = Array(session.messages.suffix(maxContextMessages * 2))
-        }
-
-        // Update session
-        sessionQueue.sync(flags: .barrier) {
-            activeSessions[sessionId] = session
+        if !updated {
+            logger.warning("Session \(sessionId) was ended during message processing")
         }
 
         return response
@@ -247,20 +276,18 @@ public class GeminiImageConversationManager {
         mimeType: String = "image/jpeg",
         sessionId: String
     ) throws {
-        guard var session = getSession(sessionId) else {
-            throw GeminiImageError.invalidConfiguration("Session not found")
-        }
-
-        // Validate image size
+        // Validate image size before locking
         guard imageData.count <= maxImageSize else {
             throw GeminiImageError.invalidImageData
         }
 
-        session.currentImage = imageData
-        session.currentImageMimeType = mimeType
+        let updated = updateSession(sessionId) { session in
+            session.currentImage = imageData
+            session.currentImageMimeType = mimeType
+        }
 
-        sessionQueue.sync(flags: .barrier) {
-            activeSessions[sessionId] = session
+        guard updated else {
+            throw GeminiImageError.invalidConfiguration("Session not found")
         }
 
         logger.info("Added image to session: \(sessionId)")
@@ -268,15 +295,13 @@ public class GeminiImageConversationManager {
 
     /// Clear the current image from session
     public func clearImage(sessionId: String) throws {
-        guard var session = getSession(sessionId) else {
-            throw GeminiImageError.invalidConfiguration("Session not found")
+        let updated = updateSession(sessionId) { session in
+            session.currentImage = nil
+            session.currentImageMimeType = nil
         }
 
-        session.currentImage = nil
-        session.currentImageMimeType = nil
-
-        sessionQueue.sync(flags: .barrier) {
-            activeSessions[sessionId] = session
+        guard updated else {
+            throw GeminiImageError.invalidConfiguration("Session not found")
         }
     }
 

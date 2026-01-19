@@ -153,7 +153,8 @@ public protocol Agent: Sendable {
 
 /// Default implementations
 public extension Agent {
-    var id: String { UUID().uuidString }
+    // Note: id should NOT have a default implementation that generates UUID
+    // Each concrete agent MUST provide its own stable id
     var capabilities: [AgentCapability] { [] }
 
     func canHandle(input: AgentInput) -> Bool {

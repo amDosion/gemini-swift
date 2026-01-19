@@ -514,10 +514,14 @@ public final class BoundaryAgent: Agent, @unchecked Sendable {
 
         // Truncate if too long
         if let maxLengthIssue = issues.first(where: { $0.message.contains("exceeds maximum length") }) {
-            if let length = Int(maxLengthIssue.location?.components(separatedBy: ": ").last ?? "") {
-                let maxAllowed = 100000 // default max
-                if sanitized.count > maxAllowed {
-                    sanitized = String(sanitized.prefix(maxAllowed))
+            // Extract max allowed from message like "Content exceeds maximum length of 100000"
+            let message = maxLengthIssue.message
+            if let range = message.range(of: "maximum length of ") {
+                let afterMax = message[range.upperBound...]
+                if let maxAllowed = Int(afterMax.prefix(while: { $0.isNumber })) {
+                    if sanitized.count > maxAllowed {
+                        sanitized = String(sanitized.prefix(maxAllowed))
+                    }
                 }
             }
         }

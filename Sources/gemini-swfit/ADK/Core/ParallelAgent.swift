@@ -29,9 +29,10 @@ public final class ParallelAgent: WorkflowAgent, @unchecked Sendable {
         case concatenate      // Join all outputs
         case bestConfidence   // Pick highest confidence
         case merge            // Merge structured data
-        case custom((([AgentOutput]) -> AgentOutput)?)  // Note: closure not Sendable
+        case weightedAverage  // Weight by confidence scores
+        // Note: Custom aggregation via closure removed due to Sendable constraints
+        // To use custom aggregation, subclass ParallelAgent and override aggregate()
 
-        // Sendable version
         public static let defaultStrategy: AggregationStrategy = .concatenate
     }
 
@@ -158,12 +159,39 @@ public final class ParallelAgent: WorkflowAgent, @unchecked Sendable {
         case .merge:
             return aggregateMerge(outputs: outputs, processingTime: processingTime)
 
-        case .custom(let aggregator):
-            if let customAggregator = aggregator {
-                return customAggregator(outputs)
-            }
+        case .weightedAverage:
+            return aggregateWeightedAverage(outputs: outputs, processingTime: processingTime)
+        }
+    }
+
+    private func aggregateWeightedAverage(
+        outputs: [AgentOutput],
+        processingTime: TimeInterval
+    ) -> AgentOutput {
+        let totalConfidence = outputs.reduce(0.0) { $0 + $1.confidence }
+        guard totalConfidence > 0 else {
             return aggregateConcatenate(outputs: outputs, processingTime: processingTime)
         }
+
+        // Weight content by confidence
+        let weightedContent = outputs
+            .sorted { $0.confidence > $1.confidence }
+            .enumerated()
+            .map { index, output in
+                let weight = output.confidence / totalConfidence
+                return "[\(output.agentId) - weight: \(String(format: "%.1f%%", weight * 100))]\n\(output.content)"
+            }
+            .joined(separator: "\n\n---\n\n")
+
+        let avgConfidence = outputs.reduce(0.0) { $0 + $1.confidence } / Double(outputs.count)
+
+        return AgentOutput(
+            agentId: id,
+            content: weightedContent,
+            structuredData: mergeStructuredData(outputs),
+            confidence: avgConfidence,
+            processingTime: processingTime
+        )
     }
 
     private func aggregateConcatenate(

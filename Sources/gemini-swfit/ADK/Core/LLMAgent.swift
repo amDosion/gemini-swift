@@ -23,7 +23,12 @@ public final class GeminiLLMAgent: LLMBasedAgent, @unchecked Sendable {
 
     private let client: GeminiClient
     private let logger: SwiftyBeaver.Type
+    /// Tools available to this agent for function calling (reserved for future use)
+    /// TODO: Integrate with Gemini function calling API when implementing tool use
     private let tools: [any AgentTool]
+
+    /// Get the tools available to this agent
+    public var availableTools: [any AgentTool] { tools }
 
     // MARK: - Initialization
 

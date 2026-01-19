@@ -264,7 +264,7 @@ public struct AgentChain {
         return self
     }
 
-    public mutating func thenParallel(_ agents: [any Agent], client: GeminiClient) -> AgentChain {
+    public mutating func thenParallel(_ agents: [any Agent]) -> AgentChain {
         let parallel = ParallelAgent(
             name: "Parallel Stage",
             children: agents

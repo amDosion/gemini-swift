@@ -96,10 +96,20 @@ public final class SequentialAgent: WorkflowAgent, @unchecked Sendable {
 
                 // Pass output to next agent if enabled
                 if passOutputs {
+                    // Merge context from output with existing context
+                    var mergedContext = currentInput.context
+                    mergedContext["last_agent_id"] = AnySendable(output.agentId)
+                    mergedContext["last_confidence"] = AnySendable(output.confidence)
+                    if let structuredData = output.structuredData {
+                        for (key, value) in structuredData {
+                            mergedContext["output_\(key)"] = value
+                        }
+                    }
+
                     currentInput = AgentInput(
                         id: UUID().uuidString,
                         content: currentInput.content,
-                        context: currentInput.context,
+                        context: mergedContext,
                         metadata: currentInput.metadata,
                         previousOutputs: outputs
                     )

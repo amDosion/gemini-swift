@@ -57,7 +57,7 @@ public class GeminiAPIKeyManager: @unchecked Sendable, ObservableObject {
     }
     
     // MARK: - Properties
-    
+
     private let logger: SwiftyBeaver.Type
     private let queue = DispatchQueue(label: "com.gemini.swift.keyManager", attributes: .concurrent)
     private var keyUsages: [String: KeyUsage] = [:]
@@ -65,6 +65,7 @@ public class GeminiAPIKeyManager: @unchecked Sendable, ObservableObject {
     private let strategy: SelectionStrategy
     private var currentIndex = 0
     private var usageHistory: [Date] = []
+    private var cleanupTimer: Timer?
     
     // MARK: - Initialization
     
@@ -86,7 +87,12 @@ public class GeminiAPIKeyManager: @unchecked Sendable, ObservableObject {
         // Start periodic cleanup
         startPeriodicCleanup()
     }
-    
+
+    deinit {
+        cleanupTimer?.invalidate()
+        cleanupTimer = nil
+    }
+
     // MARK: - Public Methods
     
     /// Get the best available API key for a request
@@ -286,11 +292,9 @@ public class GeminiAPIKeyManager: @unchecked Sendable, ObservableObject {
     }
     
     private func startPeriodicCleanup() {
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.queue.sync(flags: .barrier) {
-                    self?.cleanupExpiredUsage()
-                }
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.queue.sync(flags: .barrier) {
+                self?.cleanupExpiredUsage()
             }
         }
     }

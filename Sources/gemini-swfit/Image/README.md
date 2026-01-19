@@ -8,15 +8,18 @@ The Image module follows a modular architecture with clear separation of concern
 
 ```
 Image/
-├── GeminiImageModels.swift    # All image-related types and configurations
-├── GeminiImageUploader.swift  # Image file upload handling
-├── GeminiImageGenerator.swift # Image generation (Gemini & Imagen)
-├── GeminiImageEditor.swift    # Image editing (inpaint, outpaint, style)
-├── GeminiImageManager.swift   # High-level coordinator
-└── README.md                  # This file
+├── GeminiImageModels.swift              # All image-related types and configurations
+├── GeminiImageUploader.swift            # Image file upload handling
+├── GeminiImageGenerator.swift           # Image generation (Gemini & Imagen)
+├── GeminiImageEditor.swift              # Image editing (inpaint, outpaint, style)
+├── GeminiImageManager.swift             # High-level coordinator
+├── GeminiImageConversationManager.swift # Multi-turn conversation editing
+└── README.md                            # This file
 ```
 
-Additionally, `GeminiClient+Image.swift` in the Extensions directory provides convenient access from the main client.
+Additionally:
+- `GeminiClient+Image.swift` in Extensions provides convenient access from the main client
+- `Camera/` module provides camera capture integration with conversation editing
 
 ## Components
 

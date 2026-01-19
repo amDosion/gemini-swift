@@ -1,16 +1,26 @@
 # API Module
 
-This module provides API key management and authentication utilities for the Gemini API.
+This module provides API key management, authentication utilities, and third-party provider support for the Gemini API.
 
 ## Architecture
 
 ```
 API/
 ├── GeminiAPIKeyManager.swift  # API key rotation and quota management
+├── GeminiAPIProvider.swift    # Third-party API provider support
 └── README.md                  # This file
 ```
 
 ## Components
+
+### GeminiAPIProvider
+
+Support for third-party API providers:
+- Google Gemini (official)
+- OpenRouter
+- Together AI
+- Fireworks AI
+- Custom/self-hosted endpoints
 
 ### GeminiAPIKeyManager
 
@@ -106,3 +116,94 @@ let keyManager = GeminiAPIKeyManager(
 ## Thread Safety
 
 All operations are thread-safe using concurrent dispatch queues with barriers for write operations.
+
+## Third-Party Provider Support
+
+### Using Google's Official API
+
+```swift
+let client = GeminiClient(apiKey: "YOUR_GOOGLE_API_KEY")
+```
+
+### Using OpenRouter
+
+```swift
+let client = GeminiClient.withOpenRouter(apiKey: "YOUR_OPENROUTER_KEY")
+
+// Or manually
+let provider = GeminiAPIProvider.openRouter(apiKey: "YOUR_KEY")
+let client = GeminiClient(provider: provider)
+```
+
+### Using Together AI
+
+```swift
+let client = GeminiClient.withTogetherAI(apiKey: "YOUR_TOGETHER_KEY")
+```
+
+### Using Custom Third-Party URL
+
+```swift
+let client = GeminiClient(
+    thirdPartyURL: "https://your-api-endpoint.com/v1/",
+    apiKey: "YOUR_API_KEY",
+    authScheme: .bearerToken  // or .queryParameter, .xApiKey
+)
+```
+
+### Using Self-Hosted Endpoint
+
+```swift
+guard let provider = GeminiAPIProvider.selfHosted(
+    baseURL: "http://localhost:8080/api/",
+    apiKey: "optional-key"
+) else { return }
+
+let client = GeminiClient(provider: provider)
+```
+
+### Custom Provider with Full Configuration
+
+```swift
+let provider = GeminiAPIProvider(
+    name: "My Custom Provider",
+    baseURL: URL(string: "https://api.example.com/v1/")!,
+    apiKeys: ["key1", "key2"],
+    customHeaders: [
+        "X-Custom-Header": "value"
+    ],
+    authScheme: .bearerToken,
+    modelMapping: [
+        "gemini-2.5-flash": "custom-model-name"
+    ]
+)
+
+let client = GeminiClient(provider: provider)
+```
+
+### Managing Multiple Providers
+
+```swift
+let manager = GeminiProviderManager()
+
+// Register providers
+manager.register(GeminiAPIProvider.google(apiKey: "google-key"))
+manager.register(GeminiAPIProvider.openRouter(apiKey: "openrouter-key"))
+
+// Switch between providers
+manager.setCurrentProvider("OpenRouter")
+
+// Get provider
+if let provider = manager.defaultProvider {
+    let client = GeminiClient(provider: provider)
+}
+```
+
+## Authentication Schemes
+
+| Scheme | Header/Location | Example |
+|--------|-----------------|---------|
+| `queryParameter` | `?key=API_KEY` | Google Gemini |
+| `bearerToken` | `Authorization: Bearer KEY` | OpenRouter, Together AI |
+| `xApiKey` | `X-API-Key: KEY` | Some custom APIs |
+| `customHeader` | Use `customHeaders` | Custom implementations |

@@ -470,62 +470,143 @@ public class GeminiImageManager {
 
     // MARK: - Batch Operations
 
-    /// Generate images in batch
+    /// Maximum concurrent operations for batch processing
+    public static var maxConcurrentOperations: Int = 4
+
+    /// Generate images in batch with concurrent processing
     public func batchGenerateImages(
         prompts: [String],
         model: ImageGenerationModel = .gemini25FlashImage,
-        config: ImageGenerationConfig = .default
+        config: ImageGenerationConfig = .default,
+        maxConcurrent: Int? = nil
     ) async throws -> [ImageGenerationResponse] {
-        var results: [ImageGenerationResponse] = []
+        let concurrentLimit = maxConcurrent ?? Self.maxConcurrentOperations
 
-        for prompt in prompts {
-            let apiKey = client.getNextApiKey()
+        return try await withThrowingTaskGroup(of: (Int, ImageGenerationResponse).self) { group in
+            var results: [(Int, ImageGenerationResponse)] = []
+            var currentIndex = 0
 
-            let response: ImageGenerationResponse
+            // Add initial batch of tasks
+            for i in 0..<min(concurrentLimit, prompts.count) {
+                let prompt = prompts[i]
+                let index = i
+                let apiKey = client.getNextApiKey()
 
-            if model.requiresResponseModalities {
-                response = try await generator.generateWithGemini(
-                    prompt: prompt,
-                    model: model,
-                    config: config,
-                    apiKey: apiKey
-                )
-            } else {
-                response = try await generator.generateWithImagen(
-                    prompt: prompt,
-                    model: model,
-                    config: config,
-                    apiKey: apiKey
-                )
+                group.addTask {
+                    let response: ImageGenerationResponse
+                    if model.requiresResponseModalities {
+                        response = try await self.generator.generateWithGemini(
+                            prompt: prompt,
+                            model: model,
+                            config: config,
+                            apiKey: apiKey
+                        )
+                    } else {
+                        response = try await self.generator.generateWithImagen(
+                            prompt: prompt,
+                            model: model,
+                            config: config,
+                            apiKey: apiKey
+                        )
+                    }
+                    return (index, response)
+                }
+            }
+            currentIndex = min(concurrentLimit, prompts.count)
+
+            // Process results and add new tasks
+            while let result = try await group.next() {
+                results.append(result)
+
+                // Add next task if available
+                if currentIndex < prompts.count {
+                    let prompt = prompts[currentIndex]
+                    let index = currentIndex
+                    let apiKey = client.getNextApiKey()
+
+                    group.addTask {
+                        let response: ImageGenerationResponse
+                        if model.requiresResponseModalities {
+                            response = try await self.generator.generateWithGemini(
+                                prompt: prompt,
+                                model: model,
+                                config: config,
+                                apiKey: apiKey
+                            )
+                        } else {
+                            response = try await self.generator.generateWithImagen(
+                                prompt: prompt,
+                                model: model,
+                                config: config,
+                                apiKey: apiKey
+                            )
+                        }
+                        return (index, response)
+                    }
+                    currentIndex += 1
+                }
             }
 
-            results.append(response)
+            // Sort by original index and return responses
+            logger.info("Batch generated \(results.count) image sets concurrently")
+            return results.sorted { $0.0 < $1.0 }.map { $0.1 }
         }
-
-        logger.info("Batch generated \(results.count) image sets")
-        return results
     }
 
-    /// Edit multiple images with the same instructions
+    /// Edit multiple images with the same instructions (concurrent)
     public func batchEditImages(
         instructions: String,
         images: [(data: Data, mimeType: String)],
-        model: ImageGenerationModel = .gemini25FlashImage
+        model: ImageGenerationModel = .gemini25FlashImage,
+        maxConcurrent: Int? = nil
     ) async throws -> [GeneratedImage] {
-        var results: [GeneratedImage] = []
+        let concurrentLimit = maxConcurrent ?? Self.maxConcurrentOperations
 
-        for image in images {
-            let editedImage = try await editImage(
-                instructions: instructions,
-                imageData: image.data,
-                imageMimeType: image.mimeType,
-                model: model
-            )
-            results.append(editedImage)
+        return try await withThrowingTaskGroup(of: (Int, GeneratedImage).self) { group in
+            var results: [(Int, GeneratedImage)] = []
+            var currentIndex = 0
+
+            // Add initial batch of tasks
+            for i in 0..<min(concurrentLimit, images.count) {
+                let image = images[i]
+                let index = i
+
+                group.addTask {
+                    let editedImage = try await self.editImage(
+                        instructions: instructions,
+                        imageData: image.data,
+                        imageMimeType: image.mimeType,
+                        model: model
+                    )
+                    return (index, editedImage)
+                }
+            }
+            currentIndex = min(concurrentLimit, images.count)
+
+            // Process results and add new tasks
+            while let result = try await group.next() {
+                results.append(result)
+
+                if currentIndex < images.count {
+                    let image = images[currentIndex]
+                    let index = currentIndex
+
+                    group.addTask {
+                        let editedImage = try await self.editImage(
+                            instructions: instructions,
+                            imageData: image.data,
+                            imageMimeType: image.mimeType,
+                            model: model
+                        )
+                        return (index, editedImage)
+                    }
+                    currentIndex += 1
+                }
+            }
+
+            logger.info("Batch edited \(results.count) images concurrently")
+            return results.sorted { $0.0 < $1.0 }.map { $0.1 }
         }
-
-        logger.info("Batch edited \(results.count) images")
-        return results
     }
 
     // MARK: - Convenience Methods

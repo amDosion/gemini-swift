@@ -503,7 +503,7 @@ public struct ChunkUploadConfig: Sendable {
 }
 
 extension GeminiBaseUploader {
-    /// Upload a large file in chunks
+    /// Upload a large file in chunks using streaming (memory-efficient)
     public func uploadFileInChunks(
         at fileURL: URL,
         displayName: String,
@@ -532,15 +532,27 @@ extension GeminiBaseUploader {
             apiKey: apiKey
         )
 
-        // Read file data
-        let fileData = try Data(contentsOf: fileURL)
-        var offset: Int = 0
-        let totalSize = fileData.count
+        // Use FileHandle for memory-efficient streaming
+        let fileHandle = try FileHandle(forReadingFrom: fileURL)
+        defer {
+            try? fileHandle.close()
+        }
+
+        var offset: Int64 = 0
+        let totalSize = fileSize
 
         while offset < totalSize {
-            let chunkEnd = min(offset + config.chunkSize, totalSize)
-            let chunk = fileData[offset..<chunkEnd]
-            let isLastChunk = chunkEnd >= totalSize
+            let remainingSize = totalSize - offset
+            let currentChunkSize = min(Int64(config.chunkSize), remainingSize)
+            let isLastChunk = (offset + currentChunkSize) >= totalSize
+
+            // Read chunk from file (memory-efficient)
+            try fileHandle.seek(toOffset: UInt64(offset))
+            guard let chunk = try fileHandle.read(upToCount: Int(currentChunkSize)) else {
+                throw GeminiUploadError.uploadFailed(
+                    NSError(domain: "GeminiUploader", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to read file chunk"])
+                )
+            }
 
             var retries = 0
             var success = false
@@ -580,7 +592,7 @@ extension GeminiBaseUploader {
                     }
 
                     success = true
-                    offset = chunkEnd
+                    offset += Int64(chunk.count)
 
                     // Report progress
                     let progress = Double(offset) / Double(totalSize)
@@ -591,7 +603,9 @@ extension GeminiBaseUploader {
                     if retries >= config.maxRetries {
                         throw error
                     }
-                    try await Task.sleep(nanoseconds: UInt64(config.retryDelay * 1_000_000_000))
+                    // Exponential backoff
+                    let delay = config.retryDelay * pow(2.0, Double(retries - 1))
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 }
             }
         }

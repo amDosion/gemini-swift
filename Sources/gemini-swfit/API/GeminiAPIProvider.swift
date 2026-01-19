@@ -174,7 +174,8 @@ public struct GeminiAPIProvider: Sendable {
         switch authScheme {
         case .queryParameter:
             // Add API key to URL query parameters
-            if var components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false) {
+            if let url = request.url,
+               var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
                 var queryItems = components.queryItems ?? []
                 queryItems.append(URLQueryItem(name: "key", value: apiKey))
                 components.queryItems = queryItems
@@ -323,6 +324,10 @@ extension GeminiClient {
     }
 
     /// Create a client with custom third-party URL and key
+    ///
+    /// - Note: Use `withThirdParty(url:apiKey:authScheme:logger:)` for a safer alternative
+    ///         that returns an optional instead of crashing on invalid URLs.
+    /// - Precondition: The `thirdPartyURL` must be a valid URL string
     public convenience init(
         thirdPartyURL: String,
         apiKey: String,
@@ -335,10 +340,31 @@ extension GeminiClient {
             apiKey: apiKey,
             authScheme: authScheme
         ) else {
-            fatalError("Invalid URL: \(thirdPartyURL)")
+            preconditionFailure("Invalid URL: \(thirdPartyURL)")
         }
 
         self.init(provider: provider, logger: logger)
+    }
+
+    /// Create a client with custom third-party URL and key (safe version)
+    ///
+    /// Returns nil if the URL is invalid instead of crashing.
+    public static func withThirdParty(
+        url: String,
+        apiKey: String,
+        authScheme: GeminiAPIProvider.AuthScheme = .bearerToken,
+        logger: SwiftyBeaver.Type = SwiftyBeaver.self
+    ) -> GeminiClient? {
+        guard let provider = GeminiAPIProvider.custom(
+            name: "Custom Provider",
+            baseURL: url,
+            apiKey: apiKey,
+            authScheme: authScheme
+        ) else {
+            return nil
+        }
+
+        return GeminiClient(provider: provider, logger: logger)
     }
 
     /// Create a client with OpenRouter

@@ -212,21 +212,25 @@ public class GeminiAPIKeyManager: @unchecked Sendable, ObservableObject {
     }
     
     private func selectKey(from keys: [KeyUsage]) -> KeyUsage {
+        // Precondition: keys must not be empty (caller ensures this)
+        precondition(!keys.isEmpty, "selectKey called with empty keys array")
+
         switch strategy {
         case .roundRobin:
             currentIndex = (currentIndex + 1) % keys.count
             return keys[currentIndex]
-            
+
         case .leastUsed:
-            return keys.min { $0.usageCount < $1.usageCount } ?? keys.first!
-            
+            // For non-empty collection, min() always returns a value
+            return keys.min { $0.usageCount < $1.usageCount } ?? keys[0]
+
         case .weightedRandom:
             // Inverse weighting - less used keys have higher probability
             let totalUsage = keys.reduce(0) { $0 + $1.usageCount }
             let weights = keys.map { totalUsage - $0.usageCount + 1 }
             let totalWeight = weights.reduce(0, +)
             let random = Int.random(in: 1...totalWeight)
-            
+
             var accumulated = 0
             for (index, weight) in weights.enumerated() {
                 accumulated += weight
@@ -234,10 +238,11 @@ public class GeminiAPIKeyManager: @unchecked Sendable, ObservableObject {
                     return keys[index]
                 }
             }
-            return keys.first!
-            
+            // Fallback (should never reach due to loop logic)
+            return keys[0]
+
         case .custom(let selector):
-            return selector(keys) ?? keys.first!
+            return selector(keys) ?? keys[0]
         }
     }
     

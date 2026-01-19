@@ -119,6 +119,7 @@ public actor LiveSession {
     private var messageHandlers: [(LiveMessage) -> Void] = []
     private var errorHandlers: [(Error) -> Void] = []
     private let logger: SwiftyBeaver.Type
+    private var receiveTask: Task<Void, Never>?
 
     public init(
         apiKey: String,
@@ -135,9 +136,14 @@ public actor LiveSession {
 
     /// Connect to the Live API
     public func connect() async throws {
-        let wsURL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=\(apiKey)"
+        // Use URLComponents for safer URL construction
+        var components = URLComponents()
+        components.scheme = "wss"
+        components.host = "generativelanguage.googleapis.com"
+        components.path = "/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+        components.queryItems = [URLQueryItem(name: "key", value: apiKey)]
 
-        guard let url = URL(string: wsURL) else {
+        guard let url = components.url else {
             throw LiveAPIError.invalidURL
         }
 
@@ -151,14 +157,18 @@ public actor LiveSession {
         isConnected = true
         logger.info("Live session connected: \(sessionId)")
 
-        // Start receiving messages
-        Task {
+        // Start receiving messages with tracked task
+        receiveTask = Task {
             await receiveMessages()
         }
     }
 
     /// Disconnect from the Live API
     public func disconnect() {
+        // Cancel receive task first
+        receiveTask?.cancel()
+        receiveTask = nil
+
         webSocket?.cancel(with: .goingAway, reason: nil)
         isConnected = false
         logger.info("Live session disconnected: \(sessionId)")
@@ -257,23 +267,26 @@ public actor LiveSession {
     }
 
     private func receiveMessages() async {
-        while isConnected {
+        while isConnected && !Task.isCancelled {
             do {
                 guard let webSocket = webSocket else { break }
 
                 let message = try await webSocket.receive()
 
+                // Copy handlers to avoid concurrent modification
+                let currentMessageHandlers = messageHandlers
+
                 switch message {
                 case .data(let data):
                     if let liveMessage = try? JSONDecoder().decode(LiveMessage.self, from: data) {
-                        for handler in messageHandlers {
+                        for handler in currentMessageHandlers {
                             handler(liveMessage)
                         }
                     }
                 case .string(let text):
                     if let data = text.data(using: .utf8),
                        let liveMessage = try? JSONDecoder().decode(LiveMessage.self, from: data) {
-                        for handler in messageHandlers {
+                        for handler in currentMessageHandlers {
                             handler(liveMessage)
                         }
                     }
@@ -281,7 +294,9 @@ public actor LiveSession {
                     break
                 }
             } catch {
-                for handler in errorHandlers {
+                // Copy handlers to avoid concurrent modification
+                let currentErrorHandlers = errorHandlers
+                for handler in currentErrorHandlers {
                     handler(error)
                 }
                 break

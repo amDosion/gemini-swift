@@ -81,9 +81,9 @@ public struct GeminiRetryConfig: Sendable {
         let exponentialDelay = baseDelay * pow(multiplier, Double(attempt))
         let clampedDelay = min(exponentialDelay, maxDelay)
 
-        // Add jitter
-        let jitter = clampedDelay * jitterFactor * Double.random(in: -1...1)
-        return max(0, clampedDelay + jitter)
+        // Add positive jitter only (0 to jitterFactor) to avoid reducing backoff
+        let jitter = clampedDelay * jitterFactor * Double.random(in: 0...1)
+        return clampedDelay + jitter
     }
 
     /// Check if an HTTP status code should trigger a retry
@@ -112,7 +112,7 @@ public struct GeminiRetryConfig: Sendable {
 // MARK: - Retry Result
 
 /// Result of a retry operation
-public enum RetryResult<T> {
+public enum RetryResult<T: Sendable>: Sendable {
     case success(T, attempts: Int)
     case failure(Error, attempts: Int)
 
@@ -186,7 +186,7 @@ public actor RetryExecutor {
     }
 
     /// Execute with detailed result including attempt count
-    public func executeWithResult<T>(
+    public func executeWithResult<T: Sendable>(
         operation: @Sendable () async throws -> T
     ) async -> RetryResult<T> {
         var lastError: Error?
@@ -198,7 +198,15 @@ public actor RetryExecutor {
             } catch {
                 lastError = error
 
-                let shouldRetry = config.shouldRetry(error: error)
+                // Check both network errors and Gemini-specific API errors
+                let shouldRetry = config.shouldRetry(error: error) ||
+                    (error as? GeminiClient.GeminiError).map { geminiError in
+                        if case .apiError(_, let statusCode) = geminiError,
+                           let code = statusCode {
+                            return config.shouldRetry(statusCode: code)
+                        }
+                        return false
+                    } ?? false
 
                 if attempt == config.maxRetries || !shouldRetry {
                     return .failure(error, attempts: attempt + 1)

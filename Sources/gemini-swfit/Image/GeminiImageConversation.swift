@@ -149,7 +149,10 @@ public actor ImageConversationManager {
         if let imageData = image.data {
             data = imageData
         } else if let url = image.url {
-            data = try Data(contentsOf: url)
+            // Use async file reading to avoid blocking the actor
+            data = try await Task.detached {
+                try Data(contentsOf: url)
+            }.value
         } else {
             throw ImageConversationError.invalidImage
         }
@@ -225,7 +228,9 @@ public actor ImageConversationManager {
         image: GeneratedImage?,
         thoughtSignature: ThoughtSignature? = nil
     ) async throws -> ImageGenerationResponse {
-        let url = URL(string: "\(baseURL)/models/\(model.rawValue):generateContent?key=\(apiKey)")!
+        guard let url = URL(string: "\(baseURL)/models/\(model.rawValue):generateContent?key=\(apiKey)") else {
+            throw ImageConversationError.invalidResponse
+        }
 
         var parts: [[String: Any]] = []
 
@@ -278,7 +283,9 @@ public actor ImageConversationManager {
         prompt: String,
         referenceImage: ImageInput
     ) async throws -> ImageGenerationResponse {
-        let url = URL(string: "\(baseURL)/models/\(model.rawValue):generateContent?key=\(apiKey)")!
+        guard let url = URL(string: "\(baseURL)/models/\(model.rawValue):generateContent?key=\(apiKey)") else {
+            throw ImageConversationError.invalidResponse
+        }
 
         var parts: [[String: Any]] = []
 

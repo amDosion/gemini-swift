@@ -13,7 +13,7 @@ struct WorkflowTestRunner {
 
     // MARK: - Configuration
 
-    static let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? "AIzaSyCWTzhEIF6crdHk1Wqguo7YKgbgeaxqZhw"
+    static let apiKey = ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 
     // MARK: - Test Data
 

@@ -357,7 +357,7 @@ public final class ContextAgent: Agent, @unchecked Sendable {
     private func generateWithLLM(prompt: String) async throws -> String {
         let response = try await client.generateContent(
             model: .gemini25Flash,
-            prompt: prompt,
+            text: prompt,
             generationConfig: GeminiClient.GenerationConfig(temperature: 0.3)
         )
 

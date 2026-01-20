@@ -96,7 +96,7 @@ public final class GeminiLLMAgent: LLMBasedAgent, @unchecked Sendable {
         let geminiModel = mapToGeminiModel(model)
         let response = try await client.generateContent(
             model: geminiModel,
-            prompt: prompt,
+            text: prompt,
             systemInstruction: systemInstruction.isEmpty ? nil : systemInstruction,
             generationConfig: config
         )
